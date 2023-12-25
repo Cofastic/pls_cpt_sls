@@ -299,7 +299,7 @@ def create_consignment(system):
             consignment_number, parcel_number = add_parcel(system, customer_id, destination, weight, sender_name, sender_address, sender_telephone)
 
             if consignment_number:
-                print(f"Consignment created successfully! Consignment Number: {consignment_number}, Parcel Number: {parcel_number}")
+                print(f"Consignment created successfully! Number: {consignment_number}, Parcel Number: {parcel_number}")
             else:
                 print("Failed to create consignment.")
         else:
@@ -308,8 +308,15 @@ def create_consignment(system):
         print("Invalid input. Please enter a valid customer ID.")
 
 def generate_unique_consignment_number(system):
-    system["current_consignment_number"] += 1
-    return system["current_consignment_number"]
+    system["current_consignment_number"] = 10000000  # Set the initial value
+    while True:
+        consignment_number = system["current_consignment_number"]
+        system["current_consignment_number"] += 1
+        new_consignment_number = f'{consignment_number}'  # Use f-string for correct formatting
+
+        # Check if the generated consignment number is already in use
+        if not any(consignment["consignment_number"] == new_consignment_number for consignment in system["parcels"]):
+            return new_consignment_number
 
 def delete_parcel_within_consignment(system, consignment_number):
     view_bill(system, consignment_number)
@@ -371,7 +378,7 @@ def generate_bill(system, consignment_number):
     service_tax = total_amount * 0.08
     total_amount_with_tax = total_amount + service_tax
 
-    # Update bill with total amount and service tax
+    # Update bill with total amount, service tax, and total amount with tax
     bill["total_amount"] = total_amount
     bill["service_tax"] = service_tax
     bill["total_amount_with_tax"] = total_amount_with_tax
@@ -386,15 +393,15 @@ def print_pricing_table():
 # Bill management functions
 def view_bill(system, consignment_number):
     total_amount = 0
-    headers = ["Parcel Number", "Sender Name", "Sender Address", "Sender Telephone", "Destination", "Weight", "Price"]
+    headers = ["Parcel Number", "Receiver Name", "Receiver Address", "Receiver Telephone", "Destination", "Weight", "Price"]
     bill_data = []
     for parcel in system["parcels"]:
         if parcel["consignment_number"] == consignment_number:
             bill_data.append([
                 parcel["parcel_number"],
-                parcel["sender_name"],
-                parcel["sender_address"],
-                parcel["sender_telephone"],
+                parcel["sender_name"],  # Display sender_name as receiver_name
+                parcel["sender_address"],  # Display sender_address as receiver_address
+                parcel["sender_telephone"],  # Display sender_telephone as receiver_telephone
                 parcel["destination"],
                 parcel["weight"],
                 parcel["price"]
@@ -402,13 +409,15 @@ def view_bill(system, consignment_number):
             # Convert the price to float before adding
             total_amount += float(parcel["price"].replace('RM', ''))
 
-    # Display total amount without using .2f
+    # Display total amount, service tax, and total amount with tax
     print(tabulate(bill_data, headers=headers, tablefmt="grid"))
-    print("Total Amount: RM{}".format(total_amount))
+    print(f"Total Amount: RM{total_amount:.2f}")
+    print(f"Service Tax (8%): RM{total_amount * 0.08:.2f}")
+    print(f"Total Amount with Tax: RM{(total_amount + total_amount * 0.08):.2f}")
 
 def view_bills_by_customer(system, customer_id):
     total_amount = 0
-    headers = ["Consignment Number", "Parcel Number", "Destination", "Weight", "Price"]
+    headers = ["Consignment Number", "Parcel Number", "Receiver Name", "Receiver Address", "Receiver Telephone", "Destination", "Weight (KG)", "Price (RM)"]
     bill_data = []
     for parcel in system["parcels"]:
         if parcel["customer_id"] == customer_id:
@@ -416,14 +425,23 @@ def view_bills_by_customer(system, customer_id):
             bill_data.append([
                 parcel["consignment_number"],
                 parcel["parcel_number"],
+                parcel["sender_name"],  # Display sender_name as receiver_name
+                parcel["sender_address"],  # Display sender_address as receiver_address
+                parcel["sender_telephone"],  # Display sender_telephone as receiver_telephone
                 parcel["destination"],
                 parcel["weight"],
                 price  # Use the converted price in calculations
             ])
             total_amount += price
+
+    # Calculate 8% service tax
+    service_tax = total_amount * 0.08
+    total_amount_with_tax = total_amount + service_tax
+
     print(tabulate(bill_data, headers=headers, tablefmt="grid"))
     print(f"Total Amount: RM{total_amount:.2f}")
-
+    print(f"Service Tax (8%): RM{service_tax:.2f}")
+    print(f"Total Amount with Tax: RM{total_amount_with_tax:.2f}")
 def view_bills_by_date(system, start_date, end_date):
     total_amount = 0
     headers = ["Consignment Number", "Parcel Number", "Destination", "Weight", "Price"]
@@ -488,14 +506,14 @@ while True:
                 print("3. View list of customers")
                 print("4. Check price of a parcel")
                 print("5. Generate list of parcels received")
-                print("6. View bill for a consignment")
+                print("6. View bill from a consignment number")
                 print("7. View bills by customer")
                 print("8. View bills by date range")
                 print("9. Delete a parcel")
                 print("10. Create Consignment")
                 print("11. Logout")
 
-                operator_choice = input("Enter your choice (1-9): ")
+                operator_choice = input("Enter the option number: ")
 
                 if operator_choice == '1':
                     name = input("Enter customer name: ")
@@ -506,9 +524,12 @@ while True:
                 elif operator_choice == '2':
                     view_customers(system)
                     customer_id = int(input("Enter the customer ID to modify: "))
-                    address = input("Enter new address: ")
-                    telephone = input("Enter new telephone number: ")
-                    modify_customer(system, customer_id, address, telephone)
+                    if customer_id not in (customer["id"] for customer in system["customers"]):
+                        print("Customer not found.")
+                    else:
+                        address = input("Enter new address: ")
+                        telephone = input("Enter new telephone number: ")
+                        modify_customer(system, customer_id, address, telephone)
 
                 elif operator_choice == '3':
                     view_customers(system)
@@ -527,21 +548,38 @@ while True:
 
                 elif operator_choice == '6':
                     consignment_number = int(input("Enter consignment number: "))
-                    view_bill(system, consignment_number)
+                    #checks wheter or not the consignment number that inputted by the user exists within the system or not
+                    if consignment_number in (parcel["consignment_number"] for parcel in system["parcels"]):
+                        view_bill(system, consignment_number)
+                    else:
+                        print("Consignment number not found.")
 
                 elif operator_choice == '7':
                     customer_id = int(input("Enter customer ID: "))
-                    view_bills_by_customer(system, customer_id)
+                    #checks whether or not the customers id that inputted by the user exists within the system or not
+                    if customer_id not in (customer["id"] for customer in system["customers"]):
+                        print("Customer not found.")
+                    else:
+                        view_bills_by_customer(system, customer_id)
 
                 elif operator_choice == '8':
                     start_date = input("Enter start date (YYYY-MM-DD): ")
                     end_date = input("Enter end date (YYYY-MM-DD): ")
-                    view_bills_by_date(system, start_date, end_date)
-
+                    #states that the date is invalid since the start date is greater than the end date
+                    if start_date > end_date:
+                        print("Invalid date range.")
+                    #checks whether or not the date that inputted by the user exists within the system +or not
+                    elif start_date and end_date not in (parcel["date"] for parcel in system["parcels"]):
+                        print("No bills found within the date range.")
+                    else:
+                        view_bills_by_date(system, start_date, end_date)
 
                 elif operator_choice == '9':
                     consignment_number = int(input("Enter consignment number: "))
-                    delete_parcel_within_consignment(system, consignment_number)
+                    if consignment_number in (parcel["consignment_number"] for parcel in system["parcels"]):
+                        delete_parcel_within_consignment(system, consignment_number)
+                    else:
+                        print("Consignment number not found.")
 
                 elif operator_choice == '10':
                     create_consignment(system)
